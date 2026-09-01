@@ -333,7 +333,7 @@ fun RotulosEixo(rotulos: List<String>, selecionado: Int?, maximo: Int = 5) {
             if (i % passo == 0 || i == rotulos.lastIndex) {
                 Text(
                     r, fontSize = 10.sp,
-                    color = if (i == selecionado) Verde else Tinta2,
+                    color = if (i == selecionado) Destaque else Tinta2,
                     fontWeight = if (i == selecionado) FontWeight.Bold else FontWeight.Normal
                 )
             }

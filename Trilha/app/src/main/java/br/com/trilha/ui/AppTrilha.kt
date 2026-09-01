@@ -81,7 +81,7 @@ fun AppTrilha(vm: TrilhaViewModel) {
         containerColor = Papel,
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            Column(Modifier.background(Verde).padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Column(Modifier.background(Destaque).padding(horizontal = 14.dp, vertical = 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Trilha", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEAF2ED))
@@ -120,8 +120,8 @@ fun AppTrilha(vm: TrilhaViewModel) {
                         icon = { Icon(item.icone, item.titulo, modifier = Modifier.size(20.dp)) },
                         label = { Text(item.titulo, fontSize = 10.sp) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Verde,
-                            selectedTextColor = Verde,
+                            selectedIconColor = Destaque,
+                            selectedTextColor = Destaque,
                             indicatorColor = Lavado,
                             unselectedIconColor = Tinta2,
                             unselectedTextColor = Tinta2
@@ -233,7 +233,7 @@ private fun DialogoPerfis(
                         } else {
                             Column(Modifier.weight(1f)) {
                                 Text(p.nome, fontSize = 14.5.sp, color = Tinta)
-                                if (p.id == ativoId) Text("ativo", fontSize = 11.sp, color = Verde)
+                                if (p.id == ativoId) Text("ativo", fontSize = 11.sp, color = Destaque)
                             }
                             if (p.id != ativoId) {
                                 TextButton(onClick = { vm.trocarPerfil(p.id); onFechar() }) { Text("usar") }

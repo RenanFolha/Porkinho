@@ -19,9 +19,12 @@ val Ouro = Color(0xFFB98D14)
 val Ambar = Color(0xFFC0741A)
 val Vermelho = Color(0xFFA3381B)
 val Azul = Color(0xFF2A4E7A)
+/** Cor de destaque da interface (cabeçalho, aba selecionada) — separada do
+ *  verde, que continua marcando "valor positivo" nos números financeiros. */
+val Destaque = Color(0xFFD9711A)
 
 private val esquema = lightColorScheme(
-    primary = Verde,
+    primary = Destaque,
     onPrimary = Color.White,
     primaryContainer = Lavado,
     onPrimaryContainer = VerdeEscuro,

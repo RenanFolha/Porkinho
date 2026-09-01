@@ -267,13 +267,13 @@ private fun LinhaDia(p: Perfil, mes: YearMonth, d: DiaFluxo) {
         Column(
             Modifier.width(40.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(if (hoje) Verde.copy(alpha = 0.12f) else Lavado)
+                .background(if (hoje) Destaque.copy(alpha = 0.12f) else Lavado)
                 .padding(vertical = 3.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 "${d.dia}", fontSize = 17.sp, fontWeight = FontWeight.Bold,
-                color = if (hoje) Verde else Tinta
+                color = if (hoje) Destaque else Tinta
             )
             Text(diaSemana(data), fontSize = 9.sp, color = Tinta2)
         }
