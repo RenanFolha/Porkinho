@@ -266,8 +266,8 @@ fun GraficoCenarios(
 fun BarraComposicao(
     partes: List<Triple<String, Double, Color>>,
     selecionado: Int?,
-    onSelecionar: (Int?) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSelecionar: (Int?) -> Unit
 ) {
     val total = partes.sumOf { it.second }.takeIf { it > 0 } ?: return
     val animado by animateFloatAsState(1f, tween(700), label = "composicao")
