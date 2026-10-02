@@ -13,11 +13,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ListAlt
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
 private enum class Aba(val titulo: String, val icone: ImageVector) {
     PAINEL("Painel", Icons.Filled.AccountBalanceWallet),
     AGENDA("Agenda", Icons.Filled.CalendarMonth),
-    DADOS("Dados", Icons.Filled.ListAlt),
+    DADOS("Dados", Icons.AutoMirrored.Filled.ListAlt),
     DIVIDAS("Dívidas", Icons.Filled.CreditCard),
     METAS("Metas", Icons.Filled.Flag)
 }
