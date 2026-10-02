@@ -1,12 +1,18 @@
 package br.com.trilha.ui
 
+import android.app.Activity
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import br.com.trilha.data.*
+import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
@@ -14,9 +20,20 @@ import java.time.YearMonth
 class TrilhaViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = Repositorio(app)
+    private val nuvem = NuvemRepositorio()
 
     private val _banco = MutableStateFlow(Banco())
     val banco: StateFlow<Banco> = _banco.asStateFlow()
+
+    /** Gate de entrada: o resto do app só aparece depois de logado com Google. */
+    val usuario: StateFlow<FirebaseUser?> =
+        nuvem.observarUsuario().stateIn(viewModelScope, SharingStarted.Eagerly, nuvem.usuarioAtual)
+
+    /** Locais compartilhados vêm do Firestore, não do trilha.json — ver NuvemRepositorio. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val locaisNuvem: StateFlow<List<Local>> = usuario
+        .flatMapLatest { u -> if (u != null) nuvem.observarLocais(u.uid) else flowOf(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _mes = MutableStateFlow(YearMonth.now())
     val mes: StateFlow<YearMonth> = _mes.asStateFlow()
@@ -189,35 +206,40 @@ class TrilhaViewModel(app: Application) : AndroidViewModel(app) {
         avisar("Tudo apagado")
     }
 
-    /* ---------- locais compartilhados ---------- */
-    fun addLocal() = persistir(_banco.value.let { it.copy(locais = it.locais + Local()) })
-    fun setLocal(l: Local) = persistir(_banco.value.let { b -> b.copy(locais = b.locais.map { if (it.id == l.id) l else it }) })
-    fun delLocal(id: String) = persistir(_banco.value.let { b -> b.copy(locais = b.locais.filterNot { it.id == id }) })
-
-    private fun editarLocal(localId: String, bloco: (Local) -> Local) {
-        val b = _banco.value
-        persistir(b.copy(locais = b.locais.map { if (it.id == localId) bloco(it) else it }))
+    /* ---------- conta Google e locais compartilhados ---------- */
+    fun entrarComGoogle(activity: Activity) {
+        viewModelScope.launch {
+            runCatching { nuvem.entrarComGoogle(activity) }
+                .onFailure { avisar("Não foi possível entrar com o Google") }
+        }
     }
 
-    fun addPessoa(localId: String) = editarLocal(localId) { it.copy(pessoas = it.pessoas + Pessoa()) }
-    fun setPessoa(localId: String, p: Pessoa) = editarLocal(localId) { l -> l.copy(pessoas = l.pessoas.map { if (it.id == p.id) p else it }) }
+    fun sair() = nuvem.sair()
 
-    /** Remover pessoa também limpa as divisões dela nos itens já personalizados. */
-    fun delPessoa(localId: String, id: String) = editarLocal(localId) { l ->
-        l.copy(
-            pessoas = l.pessoas.filterNot { it.id == id },
-            contas = l.contas.map { it.copy(divisao = it.divisao.filterNot { d -> d.pessoaId == id }) },
-            dividas = l.dividas.map { it.copy(divisao = it.divisao.filterNot { d -> d.pessoaId == id }) }
-        )
+    fun criarLocalNuvem(nome: String) {
+        val u = usuario.value ?: return
+        viewModelScope.launch {
+            runCatching { nuvem.criarLocal(nome, u.uid, u.displayName ?: "Eu") }
+                .onFailure { avisar("Não foi possível criar o local") }
+        }
     }
 
-    fun addContaLocal(localId: String) = editarLocal(localId) { it.copy(contas = it.contas + ContaCompartilhada()) }
-    fun setContaLocal(localId: String, c: ContaCompartilhada) = editarLocal(localId) { l -> l.copy(contas = l.contas.map { if (it.id == c.id) c else it }) }
-    fun delContaLocal(localId: String, id: String) = editarLocal(localId) { l -> l.copy(contas = l.contas.filterNot { it.id == id }) }
+    /** Mutação única dos Locais: a UI edita o objeto inteiro (copy) e salva de volta. */
+    fun salvarLocalNuvem(local: Local) {
+        viewModelScope.launch {
+            runCatching { nuvem.salvarLocal(local) }.onFailure { avisar("Não foi possível salvar") }
+        }
+    }
 
-    fun addDividaLocal(localId: String) = editarLocal(localId) { it.copy(dividas = it.dividas + DividaCompartilhada()) }
-    fun setDividaLocal(localId: String, d: DividaCompartilhada) = editarLocal(localId) { l -> l.copy(dividas = l.dividas.map { if (it.id == d.id) d else it }) }
-    fun delDividaLocal(localId: String, id: String) = editarLocal(localId) { l -> l.copy(dividas = l.dividas.filterNot { it.id == id }) }
+    suspend fun gerarLinkConvite(localId: String): String? = runCatching { nuvem.gerarConvite(localId) }.getOrNull()
+
+    fun processarConvite(token: String) {
+        val u = usuario.value ?: return
+        viewModelScope.launch {
+            val entrou = nuvem.entrarPeloConvite(token, u.uid, u.displayName ?: "Eu")
+            avisar(if (entrou != null) "Você entrou no local" else "Convite inválido")
+        }
+    }
 
     /** Preenche o perfil ativo com dados de demonstração. */
     fun carregarExemplo() {

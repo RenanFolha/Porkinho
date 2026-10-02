@@ -16,3 +16,5 @@ local.properties
 Trilha/build/
 Trilha/app/build/
 Trilha/.gradle/
+Trilha/app/google-services.json
+Trilha/.firebase/

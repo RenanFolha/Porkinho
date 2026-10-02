@@ -56,7 +56,14 @@ private fun Secao.aba(): Aba = when (this) {
 
 @Composable
 fun AppTrilha(vm: TrilhaViewModel) {
+    val usuario by vm.usuario.collectAsStateWithLifecycle()
+    if (usuario == null) {
+        EntrarTela(vm)
+        return
+    }
+
     val banco by vm.banco.collectAsStateWithLifecycle()
+    val locaisNuvem by vm.locaisNuvem.collectAsStateWithLifecycle()
     val mes by vm.mes.collectAsStateWithLifecycle()
     val aviso by vm.aviso.collectAsStateWithLifecycle()
 
@@ -153,7 +160,7 @@ fun AppTrilha(vm: TrilhaViewModel) {
                 Aba.DADOS -> DadosTela(vm, perfil, mes, interno)
                 Aba.DIVIDAS -> DividasTela(vm, perfil, interno)
                 Aba.METAS -> MetasTela(vm, perfil, interno)
-                Aba.LOCAIS -> LocaisTela(vm, banco, interno)
+                Aba.LOCAIS -> LocaisTela(vm, locaisNuvem, interno)
             }
         }
     }
@@ -272,7 +279,8 @@ private fun DialogoAjustes(vm: TrilhaViewModel, onFechar: () -> Unit) {
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
-                    "Tudo fica salvo neste aparelho, no armazenamento privado do app. Nada é enviado para nenhum servidor.",
+                    "Seus dados pessoais (renda, gastos, dívidas, metas) ficam só neste aparelho. " +
+                        "Só os Locais compartilhados vão para a nuvem, para as pessoas convidadas verem.",
                     fontSize = 12.5.sp, color = Tinta2
                 )
                 Spacer(Modifier.height(10.dp))
@@ -318,6 +326,10 @@ private fun DialogoAjustes(vm: TrilhaViewModel, onFechar: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = Vermelho)
                     ) { Text("Confirmar: apagar todos os perfis") }
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(onClick = { vm.sair() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Sair da conta Google")
                 }
             }
         }

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "br.com.trilha",
+      "sha256_cert_fingerprints": [
+        "40:88:43:05:0D:BD:6C:D0:9B:B9:42:F2:72:7A:6F:F8:77:1A:9B:59:01:A8:28:DB:AF:EC:E0:91:0F:63:5A:49"
+      ]
+    }
+  }
+]

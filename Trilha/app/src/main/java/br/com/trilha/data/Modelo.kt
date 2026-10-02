@@ -167,8 +167,7 @@ data class Perfil(
 @Serializable
 data class Banco(
     val perfis: List<Perfil> = listOf(Perfil()),
-    val ativoId: String = perfis.first().id,
-    val locais: List<Local> = emptyList()
+    val ativoId: String = perfis.first().id
 ) {
     val ativo: Perfil get() = perfis.firstOrNull { it.id == ativoId } ?: perfis.first()
 }
@@ -208,14 +207,21 @@ data class DividaCompartilhada(
     val divisao: List<Divisao> = emptyList()
 )
 
-/** Um lugar (ex.: a casa onde mora) com contas e dívidas divididas entre as pessoas que moram lá. */
+/**
+ * Um lugar (ex.: a casa onde mora) com contas e dívidas divididas entre as pessoas que moram lá.
+ * Vive só no Firestore (ver NuvemRepositorio) — não é persistido no trilha.json local.
+ */
 @Serializable
 data class Local(
     val id: String = novoId(),
     val nome: String = "Novo local",
     val pessoas: List<Pessoa> = emptyList(),
     val contas: List<ContaCompartilhada> = emptyList(),
-    val dividas: List<DividaCompartilhada> = emptyList()
+    val dividas: List<DividaCompartilhada> = emptyList(),
+    /** UIDs do Firebase com acesso de leitura/escrita — só quem entrou pelo link, não as pessoas só-nome. */
+    val membros: List<String> = emptyList(),
+    /** Token do último convite gerado; as regras do Firestore usam esse campo para validar entradas novas. */
+    val conviteAtual: String = ""
 )
 
 /* ===================== categorias e contas iniciais ===================== */

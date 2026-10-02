@@ -1,33 +1,43 @@
 package br.com.trilha.ui
 
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import br.com.trilha.data.*
 import br.com.trilha.domain.brl
 import br.com.trilha.domain.resumoLocal
+import kotlinx.coroutines.launch
 
 @Composable
-fun LocaisTela(vm: TrilhaViewModel, banco: Banco, padding: PaddingValues) {
+fun LocaisTela(vm: TrilhaViewModel, locais: List<Local>, padding: PaddingValues) {
+    var criandoNome by remember { mutableStateOf("") }
+
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
-        if (banco.locais.isEmpty()) {
+        if (locais.isEmpty()) {
             item {
                 Bloco("Locais") {
-                    ListaVazia("Crie um local para organizar contas e dívidas de um lugar onde você mora com outras pessoas.")
+                    ListaVazia("Crie um local para organizar contas e dívidas de um lugar onde você mora com outras pessoas, e convide quem mora com você por link.")
                 }
             }
         }
-        banco.locais.forEach { local ->
+        locais.forEach { local ->
             item(key = local.id) { BlocoLocal(vm, local) }
         }
         item {
             Bloco {
-                BotaoAdicionar("+ adicionar local") { vm.addLocal() }
+                CampoTexto("Nome do novo local", criandoNome, Modifier.fillMaxWidth()) { criandoNome = it }
+                Spacer(Modifier.height(6.dp))
+                BotaoAdicionar("+ adicionar local") {
+                    vm.criarLocalNuvem(criandoNome)
+                    criandoNome = ""
+                }
             }
         }
     }
@@ -35,23 +45,47 @@ fun LocaisTela(vm: TrilhaViewModel, banco: Banco, padding: PaddingValues) {
 
 @Composable
 private fun BlocoLocal(vm: TrilhaViewModel, local: Local) {
+    val contexto = LocalContext.current
+    val escopo = rememberCoroutineScope()
+
     Bloco {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CampoTexto("Nome do local", local.nome, Modifier.weight(1f)) { vm.setLocal(local.copy(nome = it)) }
-            BotaoRemover { vm.delLocal(local.id) }
+            CampoTexto("Nome do local", local.nome, Modifier.weight(1f)) { vm.salvarLocalNuvem(local.copy(nome = it)) }
+        }
+        Spacer(Modifier.height(6.dp))
+        BotaoAdicionar("convidar por link") {
+            escopo.launch {
+                val link = vm.gerarLinkConvite(local.id) ?: return@launch
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, "Entra no Local \"${local.nome}\" no Trilha: $link")
+                }
+                contexto.startActivity(Intent.createChooser(intent, "Convidar por"))
+            }
         }
 
         TituloSecao("Pessoas")
-        if (local.pessoas.isEmpty()) ListaVazia("Adicione quem mora aqui.")
+        if (local.pessoas.isEmpty()) ListaVazia("Convide ou adicione quem mora aqui.")
         local.pessoas.forEach { p ->
             key(p.id) {
                 Row(Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    CampoTexto("Nome", p.nome, Modifier.weight(1f)) { vm.setPessoa(local.id, p.copy(nome = it)) }
-                    BotaoRemover { vm.delPessoa(local.id, p.id) }
+                    CampoTexto("Nome", p.nome, Modifier.weight(1f)) {
+                        vm.salvarLocalNuvem(local.copy(pessoas = local.pessoas.map { x -> if (x.id == p.id) x.copy(nome = it) else x }))
+                    }
+                    BotaoRemover {
+                        vm.salvarLocalNuvem(
+                            local.copy(
+                                pessoas = local.pessoas.filterNot { it.id == p.id },
+                                membros = local.membros.filterNot { it == p.id },
+                                contas = local.contas.map { it.copy(divisao = it.divisao.filterNot { d -> d.pessoaId == p.id }) },
+                                dividas = local.dividas.map { it.copy(divisao = it.divisao.filterNot { d -> d.pessoaId == p.id }) }
+                            )
+                        )
+                    }
                 }
             }
         }
-        BotaoAdicionar("+ pessoa") { vm.addPessoa(local.id) }
+        BotaoAdicionar("+ pessoa (sem app)") { vm.salvarLocalNuvem(local.copy(pessoas = local.pessoas + Pessoa())) }
 
         TituloSecao("Contas compartilhadas")
         if (local.contas.isEmpty()) ListaVazia("Nada aqui ainda.")
@@ -59,19 +93,27 @@ private fun BlocoLocal(vm: TrilhaViewModel, local: Local) {
             key(c.id) {
                 Column(Modifier.padding(vertical = 4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        CampoTexto("Conta", c.nome, Modifier.weight(1f)) { vm.setContaLocal(local.id, c.copy(nome = it)) }
+                        CampoTexto("Conta", c.nome, Modifier.weight(1f)) {
+                            vm.salvarLocalNuvem(local.copy(contas = local.contas.map { x -> if (x.id == c.id) x.copy(nome = it) else x }))
+                        }
                         Spacer(Modifier.width(6.dp))
-                        CampoNumero("R$", c.valor, c.id, Modifier.width(94.dp)) { vm.setContaLocal(local.id, c.copy(valor = it)) }
+                        CampoNumero("R$", c.valor, c.id, Modifier.width(94.dp)) {
+                            vm.salvarLocalNuvem(local.copy(contas = local.contas.map { x -> if (x.id == c.id) x.copy(valor = it) else x }))
+                        }
                         Spacer(Modifier.width(6.dp))
-                        CampoDia("Dia", c.dia, c.id, Modifier.width(64.dp)) { vm.setContaLocal(local.id, c.copy(dia = it)) }
-                        BotaoRemover { vm.delContaLocal(local.id, c.id) }
+                        CampoDia("Dia", c.dia, c.id, Modifier.width(64.dp)) {
+                            vm.salvarLocalNuvem(local.copy(contas = local.contas.map { x -> if (x.id == c.id) x.copy(dia = it) else x }))
+                        }
+                        BotaoRemover { vm.salvarLocalNuvem(local.copy(contas = local.contas.filterNot { it.id == c.id })) }
                     }
-                    EditorDivisao(local, c.divisao) { vm.setContaLocal(local.id, c.copy(divisao = it)) }
+                    EditorDivisao(local, c.divisao) { nova ->
+                        vm.salvarLocalNuvem(local.copy(contas = local.contas.map { x -> if (x.id == c.id) x.copy(divisao = nova) else x }))
+                    }
                 }
                 HorizontalDivider(color = Linha.copy(alpha = 0.6f))
             }
         }
-        BotaoAdicionar("+ conta compartilhada") { vm.addContaLocal(local.id) }
+        BotaoAdicionar("+ conta compartilhada") { vm.salvarLocalNuvem(local.copy(contas = local.contas + ContaCompartilhada())) }
 
         TituloSecao("Dívidas compartilhadas")
         if (local.dividas.isEmpty()) ListaVazia("Nada aqui ainda.")
@@ -79,24 +121,36 @@ private fun BlocoLocal(vm: TrilhaViewModel, local: Local) {
             key(d.id) {
                 Column(Modifier.padding(vertical = 4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        CampoTexto("Dívida", d.nome, Modifier.weight(1f)) { vm.setDividaLocal(local.id, d.copy(nome = it)) }
-                        BotaoRemover { vm.delDividaLocal(local.id, d.id) }
+                        CampoTexto("Dívida", d.nome, Modifier.weight(1f)) {
+                            vm.salvarLocalNuvem(local.copy(dividas = local.dividas.map { x -> if (x.id == d.id) x.copy(nome = it) else x }))
+                        }
+                        BotaoRemover { vm.salvarLocalNuvem(local.copy(dividas = local.dividas.filterNot { it.id == d.id })) }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        CampoNumero("Saldo", d.saldo, d.id, Modifier.weight(1f)) { vm.setDividaLocal(local.id, d.copy(saldo = it)) }
+                        CampoNumero("Saldo", d.saldo, d.id, Modifier.weight(1f)) {
+                            vm.salvarLocalNuvem(local.copy(dividas = local.dividas.map { x -> if (x.id == d.id) x.copy(saldo = it) else x }))
+                        }
                         Spacer(Modifier.width(6.dp))
-                        CampoNumero("% a.m.", d.taxaMes, "${d.id}-tx", Modifier.weight(1f)) { vm.setDividaLocal(local.id, d.copy(taxaMes = it)) }
+                        CampoNumero("% a.m.", d.taxaMes, "${d.id}-tx", Modifier.weight(1f)) {
+                            vm.salvarLocalNuvem(local.copy(dividas = local.dividas.map { x -> if (x.id == d.id) x.copy(taxaMes = it) else x }))
+                        }
                         Spacer(Modifier.width(6.dp))
-                        CampoNumero("Parcela", d.parcela, "${d.id}-pc", Modifier.weight(1f)) { vm.setDividaLocal(local.id, d.copy(parcela = it)) }
+                        CampoNumero("Parcela", d.parcela, "${d.id}-pc", Modifier.weight(1f)) {
+                            vm.salvarLocalNuvem(local.copy(dividas = local.dividas.map { x -> if (x.id == d.id) x.copy(parcela = it) else x }))
+                        }
                         Spacer(Modifier.width(6.dp))
-                        CampoDia("Dia", d.dia, d.id, Modifier.width(64.dp)) { vm.setDividaLocal(local.id, d.copy(dia = it)) }
+                        CampoDia("Dia", d.dia, d.id, Modifier.width(64.dp)) {
+                            vm.salvarLocalNuvem(local.copy(dividas = local.dividas.map { x -> if (x.id == d.id) x.copy(dia = it) else x }))
+                        }
                     }
-                    EditorDivisao(local, d.divisao) { vm.setDividaLocal(local.id, d.copy(divisao = it)) }
+                    EditorDivisao(local, d.divisao) { nova ->
+                        vm.salvarLocalNuvem(local.copy(dividas = local.dividas.map { x -> if (x.id == d.id) x.copy(divisao = nova) else x }))
+                    }
                 }
                 HorizontalDivider(color = Linha.copy(alpha = 0.6f))
             }
         }
-        BotaoAdicionar("+ dívida compartilhada") { vm.addDividaLocal(local.id) }
+        BotaoAdicionar("+ dívida compartilhada") { vm.salvarLocalNuvem(local.copy(dividas = local.dividas + DividaCompartilhada())) }
 
         if (local.pessoas.isNotEmpty()) {
             TituloSecao("Resumo por pessoa")

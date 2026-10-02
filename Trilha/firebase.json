@@ -1,0 +1,18 @@
+{
+  "hosting": {
+    "public": "public",
+    "ignore": ["firebase.json", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "/convite/**", "destination": "/convite/index.html" }
+    ],
+    "headers": [
+      {
+        "source": "/.well-known/assetlinks.json",
+        "headers": [{ "key": "Content-Type", "value": "application/json" }]
+      }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}
