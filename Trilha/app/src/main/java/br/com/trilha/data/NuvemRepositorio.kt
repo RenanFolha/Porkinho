@@ -108,24 +108,33 @@ class NuvemRepositorio {
         return "https://$CONVITE_HOST/convite/$token"
     }
 
-    /** Retorna o id do Local em caso de sucesso, ou null se o token for inválido/expirado. */
-    suspend fun entrarPeloConvite(token: String, uid: String, nomeExibicao: String): String? = runCatching {
+    suspend fun entrarPeloConvite(token: String, uid: String, nomeExibicao: String): ResultadoConvite = runCatching {
         val convite = firestore.collection("convites").document(token).get().await()
-        val localId = convite.getString("localId") ?: return@runCatching null
+        val localId = convite.getString("localId") ?: return@runCatching ResultadoConvite.Invalido
+
+        val localRef = firestore.collection("locais").document(localId)
+        val membrosAtuais = localRef.get().await().get("membros") as? List<*> ?: emptyList<Any>()
+        if (uid in membrosAtuais) return@runCatching ResultadoConvite.JaEraMembro(localId)
 
         @Suppress("UNCHECKED_CAST")
         val pessoaMapa = json.encodeToJsonElement(Pessoa.serializer(), Pessoa(id = uid, nome = nomeExibicao))
             .paraQualquer() as Map<String, Any>
 
-        firestore.collection("locais").document(localId).update(
+        localRef.update(
             mapOf(
                 "membros" to FieldValue.arrayUnion(uid),
                 "pessoas" to FieldValue.arrayUnion(pessoaMapa),
                 "conviteAtual" to token
             )
         ).await()
-        localId
-    }.getOrNull()
+        ResultadoConvite.Entrou(localId)
+    }.getOrElse { ResultadoConvite.Invalido }
+}
+
+sealed class ResultadoConvite {
+    data class Entrou(val localId: String) : ResultadoConvite()
+    data class JaEraMembro(val localId: String) : ResultadoConvite()
+    data object Invalido : ResultadoConvite()
 }
 
 /* ===================== conversão Local <-> mapa do Firestore ===================== */

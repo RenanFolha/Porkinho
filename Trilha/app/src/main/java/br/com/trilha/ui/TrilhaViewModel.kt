@@ -236,8 +236,11 @@ class TrilhaViewModel(app: Application) : AndroidViewModel(app) {
     fun processarConvite(token: String) {
         val u = usuario.value ?: return
         viewModelScope.launch {
-            val entrou = nuvem.entrarPeloConvite(token, u.uid, u.displayName ?: "Eu")
-            avisar(if (entrou != null) "Você entrou no local" else "Convite inválido")
+            when (nuvem.entrarPeloConvite(token, u.uid, u.displayName ?: "Eu")) {
+                is ResultadoConvite.Entrou -> avisar("Você entrou no local")
+                is ResultadoConvite.JaEraMembro -> avisar("Você já faz parte deste local")
+                ResultadoConvite.Invalido -> avisar("Convite inválido")
+            }
         }
     }
 
