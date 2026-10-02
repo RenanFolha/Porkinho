@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -40,7 +41,8 @@ private enum class Aba(val titulo: String, val icone: ImageVector) {
     AGENDA("Agenda", Icons.Filled.CalendarMonth),
     DADOS("Dados", Icons.AutoMirrored.Filled.ListAlt),
     DIVIDAS("Dívidas", Icons.Filled.CreditCard),
-    METAS("Metas", Icons.Filled.Flag)
+    METAS("Metas", Icons.Filled.Flag),
+    LOCAIS("Locais", Icons.Filled.Groups)
 }
 
 /** Para onde cada seção do painel adaptativo leva ao ser tocada. */
@@ -151,6 +153,7 @@ fun AppTrilha(vm: TrilhaViewModel) {
                 Aba.DADOS -> DadosTela(vm, perfil, mes, interno)
                 Aba.DIVIDAS -> DividasTela(vm, perfil, interno)
                 Aba.METAS -> MetasTela(vm, perfil, interno)
+                Aba.LOCAIS -> LocaisTela(vm, banco, interno)
             }
         }
     }

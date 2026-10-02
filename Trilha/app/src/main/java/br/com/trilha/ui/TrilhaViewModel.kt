@@ -189,6 +189,36 @@ class TrilhaViewModel(app: Application) : AndroidViewModel(app) {
         avisar("Tudo apagado")
     }
 
+    /* ---------- locais compartilhados ---------- */
+    fun addLocal() = persistir(_banco.value.let { it.copy(locais = it.locais + Local()) })
+    fun setLocal(l: Local) = persistir(_banco.value.let { b -> b.copy(locais = b.locais.map { if (it.id == l.id) l else it }) })
+    fun delLocal(id: String) = persistir(_banco.value.let { b -> b.copy(locais = b.locais.filterNot { it.id == id }) })
+
+    private fun editarLocal(localId: String, bloco: (Local) -> Local) {
+        val b = _banco.value
+        persistir(b.copy(locais = b.locais.map { if (it.id == localId) bloco(it) else it }))
+    }
+
+    fun addPessoa(localId: String) = editarLocal(localId) { it.copy(pessoas = it.pessoas + Pessoa()) }
+    fun setPessoa(localId: String, p: Pessoa) = editarLocal(localId) { l -> l.copy(pessoas = l.pessoas.map { if (it.id == p.id) p else it }) }
+
+    /** Remover pessoa também limpa as divisões dela nos itens já personalizados. */
+    fun delPessoa(localId: String, id: String) = editarLocal(localId) { l ->
+        l.copy(
+            pessoas = l.pessoas.filterNot { it.id == id },
+            contas = l.contas.map { it.copy(divisao = it.divisao.filterNot { d -> d.pessoaId == id }) },
+            dividas = l.dividas.map { it.copy(divisao = it.divisao.filterNot { d -> d.pessoaId == id }) }
+        )
+    }
+
+    fun addContaLocal(localId: String) = editarLocal(localId) { it.copy(contas = it.contas + ContaCompartilhada()) }
+    fun setContaLocal(localId: String, c: ContaCompartilhada) = editarLocal(localId) { l -> l.copy(contas = l.contas.map { if (it.id == c.id) c else it }) }
+    fun delContaLocal(localId: String, id: String) = editarLocal(localId) { l -> l.copy(contas = l.contas.filterNot { it.id == id }) }
+
+    fun addDividaLocal(localId: String) = editarLocal(localId) { it.copy(dividas = it.dividas + DividaCompartilhada()) }
+    fun setDividaLocal(localId: String, d: DividaCompartilhada) = editarLocal(localId) { l -> l.copy(dividas = l.dividas.map { if (it.id == d.id) d else it }) }
+    fun delDividaLocal(localId: String, id: String) = editarLocal(localId) { l -> l.copy(dividas = l.dividas.filterNot { it.id == id }) }
+
     /** Preenche o perfil ativo com dados de demonstração. */
     fun carregarExemplo() {
         val ym = _mes.value

@@ -167,10 +167,56 @@ data class Perfil(
 @Serializable
 data class Banco(
     val perfis: List<Perfil> = listOf(Perfil()),
-    val ativoId: String = perfis.first().id
+    val ativoId: String = perfis.first().id,
+    val locais: List<Local> = emptyList()
 ) {
     val ativo: Perfil get() = perfis.firstOrNull { it.id == ativoId } ?: perfis.first()
 }
+
+/* ===================== locais compartilhados ===================== */
+
+@Serializable
+data class Pessoa(
+    val id: String = novoId(),
+    val nome: String = ""
+)
+
+/** % que uma pessoa paga de um item específico. Lista vazia no item = dividir igualmente. */
+@Serializable
+data class Divisao(
+    val pessoaId: String = "",
+    val percentual: Double = 0.0
+)
+
+@Serializable
+data class ContaCompartilhada(
+    val id: String = novoId(),
+    val nome: String = "",
+    val valor: Double = 0.0,
+    val dia: Int = 10,
+    val divisao: List<Divisao> = emptyList()
+)
+
+@Serializable
+data class DividaCompartilhada(
+    val id: String = novoId(),
+    val nome: String = "",
+    val saldo: Double = 0.0,
+    val taxaMes: Double = 0.0,
+    val parcela: Double = 0.0,
+    val dia: Int = 10,
+    val divisao: List<Divisao> = emptyList()
+)
+
+/** Um lugar (ex.: a casa onde mora) com contas e dívidas divididas entre as pessoas que moram lá. */
+@Serializable
+data class Local(
+    val id: String = novoId(),
+    val nome: String = "Novo local",
+    val pessoas: List<Pessoa> = emptyList(),
+    val contas: List<ContaCompartilhada> = emptyList(),
+    val dividas: List<DividaCompartilhada> = emptyList()
+)
 
 /* ===================== categorias e contas iniciais ===================== */
 
