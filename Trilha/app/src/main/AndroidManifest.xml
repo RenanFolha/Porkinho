@@ -24,15 +24,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- TODO: troque "SEU-PROJETO.web.app" pelo host real assim que o Firebase Hosting existir
-                 (o mesmo valor de CONVITE_HOST em NuvemRepositorio.kt). -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="https"
-                    android:host="SEU-PROJETO.web.app"
+                    android:host="porki-41b23.web.app"
                     android:pathPrefix="/convite" />
             </intent-filter>
         </activity>

@@ -31,7 +31,7 @@ import kotlinx.serialization.json.long
 import kotlinx.serialization.json.longOrNull
 
 /** Host do Firebase Hosting onde o convite é publicado — mesmo valor do intent-filter em AndroidManifest.xml. */
-const val CONVITE_HOST = "SEU-PROJETO.web.app"
+const val CONVITE_HOST = "porki-41b23.web.app"
 
 /**
  * Locais compartilhados vivem no Firestore, não no trilha.json local — são os únicos dados
