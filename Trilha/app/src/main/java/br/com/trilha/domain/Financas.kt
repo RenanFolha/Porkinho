@@ -182,30 +182,61 @@ fun vencimentoFatura(compra: LocalDate, conta: Conta): LocalDate =
 
 /* ===================== fluxo de caixa diário ===================== */
 
-fun fluxoDiario(p: Perfil, ym: YearMonth): Fluxo {
+/** Data ISO → LocalDate, ou null se o texto estiver malformado (ex.: backup editado à mão). */
+fun dataOuNull(texto: String): LocalDate? = runCatching { LocalDate.parse(texto.take(10)) }.getOrNull()
+
+/** Item recorrente vale em `ym` se não tem início registrado ou se já começou. */
+fun vigente(desde: String, ym: YearMonth): Boolean {
+    if (desde.isBlank()) return true
+    val inicio = runCatching { YearMonth.parse(desde.take(7)) }.getOrNull() ?: return true
+    return !ym.isBefore(inicio)
+}
+
+/** Meses de parcela que ainda faltam para quitar o saldo atual; null se a parcela não cobre os juros. */
+fun mesesRestantes(d: Divida): Int? {
+    if (d.saldo <= 0.01) return 0
+    val i = d.taxaMes / 100.0
+    var s = d.saldo
+    for (m in 1..600) {
+        s = s * (1 + i) - d.parcela
+        if (s <= 0.01) return m
+    }
+    return null
+}
+
+/**
+ * A parcela aparece no mês se a dívida já existia e, para meses a partir de
+ * `hoje`, se o saldo atual ainda não terá sido quitado até lá.
+ */
+private fun parcelaNoMes(d: Divida, ym: YearMonth, hoje: YearMonth): Boolean {
+    if (d.parcela <= 0 || !vigente(d.desde, ym)) return false
+    if (ym.isBefore(hoje)) return true
+    val restantes = mesesRestantes(d) ?: return true
+    return java.time.temporal.ChronoUnit.MONTHS.between(hoje, ym) < restantes
+}
+
+fun fluxoDiario(p: Perfil, ym: YearMonth, hoje: YearMonth = YearMonth.now()): Fluxo {
     val ultimoDia = ym.lengthOfMonth()
     val eventos = HashMap<Int, MutableList<Evento>>()
     fun lancar(dia: Int, ev: Evento) {
         eventos.getOrPut(dia.coerceIn(1, ultimoDia)) { mutableListOf() }.add(ev)
     }
 
-    p.rendas.filter { it.valor > 0 }.forEach {
+    p.rendas.filter { it.valor > 0 && vigente(it.desde, ym) }.forEach {
         lancar(it.dia, Evento(it.nome.ifBlank { "Renda" }, it.valor, true, it.contaId))
     }
-    p.fixos.filter { it.valor > 0 && !p.ehCartao(it.contaId, it.forma) }.forEach {
+    p.fixos.filter { it.valor > 0 && vigente(it.desde, ym) && !p.ehCartao(it.contaId, it.forma) }.forEach {
         lancar(it.dia, Evento(it.nome.ifBlank { "Gasto fixo" }, it.valor, false, it.contaId, it.categoriaId))
     }
-    p.dividas.filter { it.parcela > 0 }.forEach {
+    p.dividas.filter { parcelaNoMes(it, ym, hoje) }.forEach {
         lancar(it.dia, Evento("${it.nome.ifBlank { "Dívida" }} (parcela)", it.parcela, false))
     }
     p.lancamentos
-        .filter { it.valor > 0 && it.data.length >= 10 && !p.ehCartao(it.contaId, it.forma) }
-        .filter { it.data.substring(0, 7) == ym.toString() }
+        .filter { it.valor > 0 && !p.ehCartao(it.contaId, it.forma) }
         .forEach {
-            lancar(
-                it.data.substring(8, 10).toInt(),
-                Evento(it.nome.ifBlank { "Gasto" }, it.valor, false, it.contaId, it.categoriaId)
-            )
+            val data = dataOuNull(it.data) ?: return@forEach
+            if (YearMonth.from(data) != ym) return@forEach
+            lancar(data.dayOfMonth, Evento(it.nome.ifBlank { "Gasto" }, it.valor, false, it.contaId, it.categoriaId))
         }
 
     // Uma fatura por cartão, cada um com seu próprio fechamento e vencimento.
@@ -213,14 +244,19 @@ fun fluxoDiario(p: Perfil, ym: YearMonth): Fluxo {
     p.contas.filter { it.ehCartao }.forEach { cartao ->
         var total = 0.0
         var itens = 0
-        p.lancamentos.filter { it.valor > 0 && it.contaId == cartao.id && it.data.length >= 10 }.forEach {
-            if (YearMonth.from(vencimentoFatura(LocalDate.parse(it.data), cartao)) == ym) {
+        p.lancamentos.filter { it.valor > 0 && it.contaId == cartao.id }.forEach {
+            val data = dataOuNull(it.data) ?: return@forEach
+            if (YearMonth.from(vencimentoFatura(data, cartao)) == ym) {
                 total += it.valor; itens++
             }
         }
         p.fixos.filter { it.valor > 0 && it.contaId == cartao.id }.forEach { f ->
-            listOf(-1L, 0L).forEach { off ->
+            // A cobrança cai até dois meses depois do gasto: compra após o
+            // fechamento vai para a fatura seguinte, e o vencimento pode ser
+            // no mês posterior ao fechamento.
+            listOf(-2L, -1L, 0L).forEach { off ->
                 val mes = ym.plusMonths(off)
+                if (!vigente(f.desde, mes)) return@forEach
                 val data = mes.atDay(min(f.dia.coerceAtLeast(1), mes.lengthOfMonth()))
                 if (YearMonth.from(vencimentoFatura(data, cartao)) == ym) { total += f.valor; itens++ }
             }
@@ -261,10 +297,12 @@ fun fluxoDiario(p: Perfil, ym: YearMonth): Fluxo {
 }
 
 /** Resumo de vários meses, para o gráfico comparativo. */
-fun compararMeses(p: Perfil, ate: YearMonth, quantidade: Int = 6): List<ComparacaoMes> =
+fun compararMeses(
+    p: Perfil, ate: YearMonth, quantidade: Int = 6, hoje: YearMonth = YearMonth.now()
+): List<ComparacaoMes> =
     (quantidade - 1 downTo 0).map { off ->
         val ym = ate.minusMonths(off.toLong())
-        val f = fluxoDiario(p, ym)
+        val f = fluxoDiario(p, ym, hoje)
         ComparacaoMes(ym, f.entradas, f.saidas, f.saldoFinal, f.menorSaldo)
     }
 
@@ -273,7 +311,7 @@ fun compararMeses(p: Perfil, ate: YearMonth, quantidade: Int = 6): List<Comparac
 fun gastosPorCategoria(p: Perfil, r: Resumo, ym: YearMonth? = null): List<GastoCategoria> {
     val totais = HashMap<String, Double>()
 
-    p.fixos.filter { it.valor > 0 }.forEach {
+    p.fixos.filter { it.valor > 0 && (ym == null || vigente(it.desde, ym)) }.forEach {
         totais[it.categoriaId] = (totais[it.categoriaId] ?: 0.0) + it.valor
     }
     if (ym != null) {
@@ -406,6 +444,7 @@ fun diagnostico(p: Perfil, r: Resumo, f: Fluxo): Diagnostico {
             "1. Reorganizar datas de vencimento: a conta fecha no mês, mas o dinheiro não está lá no dia da cobrança."
         caras.isNotEmpty() ->
             "1. Quitar a dívida de maior juro. Cada real abatido rende o próprio juro, sem risco e sem imposto."
+        r.custoBase <= 0 -> "1. Cadastrar os gastos essenciais para dimensionar a reserva de emergência."
         r.mesesReserva < 3 -> "1. Formar 3 meses de reserva (${brl(r.custoBase * 3)}) em liquidez diária."
         r.mesesReserva < 6 -> "1. Completar a reserva até 6 meses (${brl(r.custoBase * 6)})."
         else -> "1. Direcionar a sobra de ${brl(r.sobra)}/mês para as metas."

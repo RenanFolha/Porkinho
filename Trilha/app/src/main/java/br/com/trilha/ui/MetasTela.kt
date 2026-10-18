@@ -19,7 +19,7 @@ import kotlin.math.pow
 
 @Composable
 fun MetasTela(vm: TrilhaViewModel, p: Perfil, padding: PaddingValues) {
-    val r = resumo(p)
+    val r = remember(p) { resumo(p) }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
 

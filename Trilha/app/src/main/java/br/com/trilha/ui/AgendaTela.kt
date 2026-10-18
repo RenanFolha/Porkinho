@@ -31,8 +31,8 @@ import java.time.YearMonth
 @Composable
 fun AgendaTela(vm: TrilhaViewModel, p: Perfil, mes: YearMonth, padding: PaddingValues) {
     val ref = mes.toString()
-    val fluxo = fluxoDiario(p, mes)
-    val r = resumo(p)
+    val fluxo = remember(p, mes) { fluxoDiario(p, mes) }
+    val r = remember(p) { resumo(p) }
 
     var filtroClasse by remember { mutableStateOf<Classe?>(null) }
     var filtroConta by remember { mutableStateOf<String?>(null) }

@@ -52,7 +52,9 @@ data class Renda(
     val nome: String = "",
     val valor: Double = 0.0,
     val dia: Int = 5,
-    val contaId: String = ""
+    val contaId: String = "",
+    /** Primeiro mês "AAAA-MM" em que vale. Vazio = sempre (dados antigos). */
+    val desde: String = ""
 )
 
 @Serializable
@@ -66,6 +68,8 @@ data class Fixo(
     val contaId: String = "",
     /** Meses "AAAA-MM" já marcados como pagos. */
     val pagos: List<String> = emptyList(),
+    /** Primeiro mês "AAAA-MM" em que vale. Vazio = sempre (dados antigos). */
+    val desde: String = "",
     // legado
     val classe: Classe = Classe.ESSENCIAL,
     val forma: Forma = Forma.CONTA
@@ -93,7 +97,9 @@ data class Divida(
     /** Juros em % ao mês. */
     val taxaMes: Double = 0.0,
     val parcela: Double = 0.0,
-    val dia: Int = 10
+    val dia: Int = 10,
+    /** Primeiro mês "AAAA-MM" com parcela. Vazio = sempre (dados antigos). */
+    val desde: String = ""
 )
 
 @Serializable

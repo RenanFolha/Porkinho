@@ -57,6 +57,15 @@ fun AppTrilha(vm: TrilhaViewModel) {
     val banco by vm.banco.collectAsStateWithLifecycle()
     val mes by vm.mes.collectAsStateWithLifecycle()
     val aviso by vm.aviso.collectAsStateWithLifecycle()
+    val carregado by vm.carregado.collectAsStateWithLifecycle()
+
+    // Enquanto o arquivo não foi lido, não há o que editar.
+    if (!carregado) {
+        Box(Modifier.fillMaxSize().background(Papel), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Destaque)
+        }
+        return
+    }
 
     val perfil = banco.ativo
     var aba by rememberSaveable { mutableStateOf(Aba.PAINEL) }
@@ -66,7 +75,6 @@ fun AppTrilha(vm: TrilhaViewModel) {
     val snackbar = remember { SnackbarHostState() }
     val escopo = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) { vm.semearSeVazio() }
     LaunchedEffect(aviso) {
         aviso?.let {
             escopo.launch { snackbar.showSnackbar(it) }
@@ -74,8 +82,8 @@ fun AppTrilha(vm: TrilhaViewModel) {
         }
     }
 
-    val r = resumo(perfil)
-    val fluxo = fluxoDiario(perfil, mes)
+    val r = remember(perfil) { resumo(perfil) }
+    val fluxo = remember(perfil, mes) { fluxoDiario(perfil, mes) }
 
     Scaffold(
         containerColor = Papel,

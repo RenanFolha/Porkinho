@@ -16,3 +16,4 @@ local.properties
 Trilha/build/
 Trilha/app/build/
 Trilha/.gradle/
+Trilha/.kotlin/

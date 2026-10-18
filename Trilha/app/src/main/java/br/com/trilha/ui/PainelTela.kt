@@ -35,10 +35,10 @@ fun PainelTela(
     padding: PaddingValues,
     onIrPara: (Secao) -> Unit
 ) {
-    val r = resumo(p)
-    val fluxo = fluxoDiario(p, mes)
-    val secoes = painelAdaptativo(p, r, fluxo)
-    val acao = acaoDoMomento(p, r, fluxo)
+    val r = remember(p) { resumo(p) }
+    val fluxo = remember(p, mes) { fluxoDiario(p, mes) }
+    val secoes = remember(p, r, fluxo) { painelAdaptativo(p, r, fluxo) }
+    val acao = remember(p, r, fluxo) { acaoDoMomento(p, r, fluxo) }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
 

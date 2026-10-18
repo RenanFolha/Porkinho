@@ -40,7 +40,7 @@ fun proximosVencimentos(p: Perfil, dias: Long = 7, hoje: LocalDate = LocalDate.n
     val resultado = mutableListOf<Vencimento>()
     listOf(0L, 1L).forEach { off ->
         val ym = YearMonth.from(hoje).plusMonths(off)
-        fluxoDiario(p, ym).dias.forEach { d ->
+        fluxoDiario(p, ym, YearMonth.from(hoje)).dias.forEach { d ->
             val data = ym.atDay(d.dia)
             if (!data.isBefore(hoje) && !data.isAfter(limite))
                 d.eventos.forEach { resultado.add(Vencimento(data, it)) }
@@ -99,6 +99,7 @@ fun painelAdaptativo(p: Perfil, r: Resumo, f: Fluxo): List<SecaoPainel> {
         Secao.RESERVA,
         when {
             !temDados -> 20
+            r.custoBase <= 0 -> 20
             r.mesesReserva < 1 -> 88
             r.mesesReserva < 3 -> 70
             r.mesesReserva < 6 -> 50
@@ -170,6 +171,11 @@ fun acaoDoMomento(p: Perfil, r: Resumo, f: Fluxo): AcaoMomento {
                 "Abrir plano de quitação", Secao.DIVIDAS, 2
             )
         }
+        r.custoBase <= 0 -> AcaoMomento(
+            "Cadastre seus gastos essenciais",
+            "Sem moradia, alimentação e contas lançadas não dá para saber de quanto precisa a sua reserva.",
+            "Preencher dados", Secao.FLUXO, 1
+        )
         r.mesesReserva < 3 -> AcaoMomento(
             "Forme 3 meses de reserva",
             "São ${brl(r.custoBase * 3)} em liquidez diária. É o que separa um imprevisto de uma dívida nova.",

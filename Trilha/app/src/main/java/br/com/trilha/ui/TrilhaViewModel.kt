@@ -24,13 +24,25 @@ class TrilhaViewModel(app: Application) : AndroidViewModel(app) {
     private val _aviso = MutableStateFlow<String?>(null)
     val aviso: StateFlow<String?> = _aviso.asStateFlow()
 
+    /** Falso até o arquivo ser lido. Antes disso nenhuma edição é aceita. */
+    private val _carregado = MutableStateFlow(false)
+    val carregado: StateFlow<Boolean> = _carregado.asStateFlow()
+
     val perfil: Perfil get() = _banco.value.ativo
 
     init {
-        viewModelScope.launch { _banco.value = repo.carregar() }
+        viewModelScope.launch {
+            _banco.value = repo.carregar()
+            _carregado.value = true
+        }
     }
 
+    /**
+     * Gravar antes do carregamento terminar substituiria o arquivo do usuário
+     * pelo banco vazio inicial, por isso a edição é descartada nesse intervalo.
+     */
     private fun persistir(novo: Banco) {
+        if (!_carregado.value) return
         _banco.value = novo
         viewModelScope.launch { repo.salvar(novo) }
     }
@@ -75,12 +87,14 @@ class TrilhaViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /* ---------- renda ---------- */
-    fun addRenda() = editar { it.copy(rendas = it.rendas + Renda()) }
+    private fun mesAtual(): String = YearMonth.now().toString()
+
+    fun addRenda() = editar { it.copy(rendas = it.rendas + Renda(desde = mesAtual())) }
     fun setRenda(r: Renda) = editar { p -> p.copy(rendas = p.rendas.map { if (it.id == r.id) r else it }) }
     fun delRenda(id: String) = editar { p -> p.copy(rendas = p.rendas.filterNot { it.id == id }) }
 
     /* ---------- gastos fixos ---------- */
-    fun addFixo() = editar { it.copy(fixos = it.fixos + Fixo()) }
+    fun addFixo() = editar { it.copy(fixos = it.fixos + Fixo(desde = mesAtual())) }
     fun setFixo(f: Fixo) = editar { p -> p.copy(fixos = p.fixos.map { if (it.id == f.id) f else it }) }
     fun delFixo(id: String) = editar { p -> p.copy(fixos = p.fixos.filterNot { it.id == id }) }
 
@@ -96,7 +110,7 @@ class TrilhaViewModel(app: Application) : AndroidViewModel(app) {
     fun delLancamento(id: String) = editar { p -> p.copy(lancamentos = p.lancamentos.filterNot { it.id == id }) }
 
     /* ---------- dívidas ---------- */
-    fun addDivida() = editar { it.copy(dividas = it.dividas + Divida()) }
+    fun addDivida() = editar { it.copy(dividas = it.dividas + Divida(desde = mesAtual())) }
     fun setDivida(d: Divida) = editar { p -> p.copy(dividas = p.dividas.map { if (it.id == d.id) d else it }) }
     fun delDivida(id: String) = editar { p -> p.copy(dividas = p.dividas.filterNot { it.id == id }) }
     fun setExtraDivida(v: Double) = editar { it.copy(extraDivida = v) }
@@ -119,15 +133,17 @@ class TrilhaViewModel(app: Application) : AndroidViewModel(app) {
     fun setCategoria(c: Categoria) = editar { p -> p.copy(categorias = p.categorias.map { if (it.id == c.id) c else it }) }
 
     /**
-     * Apagar categoria reatribui os gastos em vez de perdê-los. Sem destino
-     * informado, eles ficam sem categoria e reaparecem para reclassificação.
+     * Apagar categoria reatribui os gastos para `destinoId` em vez de perdê-los.
+     * A última categoria não pode ser apagada.
      */
-    fun delCategoria(id: String, destinoId: String = "") = editar { p ->
-        p.copy(
+    fun delCategoria(id: String, destinoId: String) {
+        if (perfil.categorias.size <= 1) { avisar("É preciso ter ao menos uma categoria"); return }
+        if (destinoId == id || perfil.categoria(destinoId) == null) return
+        editar { p -> p.copy(
             categorias = p.categorias.filterNot { it.id == id },
             fixos = p.fixos.map { if (it.categoriaId == id) it.copy(categoriaId = destinoId) else it },
             lancamentos = p.lancamentos.map { if (it.categoriaId == id) it.copy(categoriaId = destinoId) else it }
-        )
+        ) }
     }
 
     /* ---------- contas e cartões ---------- */
@@ -145,19 +161,6 @@ class TrilhaViewModel(app: Application) : AndroidViewModel(app) {
             fixos = p.fixos.map { if (it.contaId == id) it.copy(contaId = destino) else it },
             lancamentos = p.lancamentos.map { if (it.contaId == id) it.copy(contaId = destino) else it }
         )
-    }
-
-    /** Garante que um perfil novo já nasça utilizável. */
-    fun semearSeVazio() {
-        val p = perfil
-        if (p.contas.isEmpty() || p.categorias.isEmpty()) {
-            editar {
-                it.copy(
-                    contas = it.contas.ifEmpty { contasPadrao() },
-                    categorias = it.categorias.ifEmpty { categoriasPadrao() }
-                )
-            }
-        }
     }
 
     /* ---------- configuração ---------- */
@@ -185,7 +188,7 @@ class TrilhaViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun apagarTudo() {
-        persistir(Banco())
+        persistir(migrar(Banco()))
         avisar("Tudo apagado")
     }
 

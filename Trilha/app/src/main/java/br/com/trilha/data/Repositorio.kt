@@ -2,6 +2,8 @@ package br.com.trilha.data
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -17,22 +19,55 @@ import java.io.File
 class Repositorio(context: Context) {
 
     private val arquivo = File(context.filesDir, "trilha.json")
+    private val temporario = File(context.filesDir, "trilha.json.tmp")
+    private val copia = File(context.filesDir, "trilha.json.bak")
     private val json = Json {
         prettyPrint = true
         ignoreUnknownKeys = true
         encodeDefaults = true
     }
 
-    suspend fun carregar(): Banco = withContext(Dispatchers.IO) {
-        val lido = runCatching {
-            if (arquivo.exists()) json.decodeFromString<Banco>(arquivo.readText()) else Banco()
-        }.getOrElse { Banco() }
-        migrar(lido)
+    /** Gravações em fila: a última chamada é sempre a última a chegar ao disco. */
+    private val trava = Mutex()
+
+    /**
+     * Lê o arquivo principal e, se ele estiver ausente ou ilegível, a cópia da
+     * gravação anterior. Se nada puder ser lido, o arquivo danificado é guardado
+     * à parte antes de começar do zero — nunca é sobrescrito em silêncio.
+     */
+    suspend fun carregar(): Banco = trava.withLock {
+        withContext(Dispatchers.IO) {
+            val candidatos = listOf(arquivo, copia).filter { it.exists() }
+            val lido = candidatos.firstNotNullOfOrNull { f ->
+                runCatching { migrar(json.decodeFromString<Banco>(f.readText())) }.getOrNull()
+            }
+            if (lido == null) {
+                candidatos.forEach { f ->
+                    runCatching { f.renameTo(File(f.parentFile, "${f.name}.danificado-${System.currentTimeMillis()}")) }
+                }
+            }
+            lido ?: migrar(Banco())
+        }
     }
 
+    /**
+     * Grava em arquivo temporário e só então substitui o principal, mantendo a
+     * versão anterior como cópia. Uma interrupção no meio da escrita deixa o
+     * arquivo antigo intacto.
+     */
     suspend fun salvar(banco: Banco) {
-        withContext(Dispatchers.IO) {
-            runCatching { arquivo.writeText(json.encodeToString(banco)) }
+        val texto = json.encodeToString(banco)
+        trava.withLock {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    temporario.writeText(texto)
+                    if (arquivo.exists()) {
+                        copia.delete()
+                        arquivo.renameTo(copia)
+                    }
+                    if (!temporario.renameTo(arquivo)) temporario.copyTo(arquivo, overwrite = true)
+                }
+            }
         }
     }
 
@@ -54,9 +89,20 @@ fun migrar(banco: Banco): Banco = banco.copy(perfis = banco.perfis.map { migrarP
 private fun migrarPerfil(p: Perfil): Perfil {
     if (p.contas.isNotEmpty() && p.categorias.isNotEmpty()) return p
 
-    val contas = p.contas.ifEmpty { contasPadrao(p.cartao) }
-    val idCorrente = contas.first { !it.ehCartao }.id
-    val idCartao = contas.first { it.ehCartao }.id
+    // O usuário pode ter apagado o cartão ou a conta corrente; nesse caso a
+    // conta que faltar é criada só se algum item antigo precisar dela.
+    val contas = p.contas.ifEmpty { contasPadrao(p.cartao) }.toMutableList()
+    val idCorrente by lazy {
+        contas.firstOrNull { !it.ehCartao }?.id
+            ?: Conta(nome = "Conta corrente", tipo = TipoConta.CORRENTE).also { contas.add(it) }.id
+    }
+    val idCartao by lazy {
+        contas.firstOrNull { it.ehCartao }?.id
+            ?: Conta(
+                nome = "Cartão de crédito", tipo = TipoConta.CARTAO,
+                diaFechamento = p.cartao.fecha, diaVencimento = p.cartao.vence
+            ).also { contas.add(it) }.id
+    }
 
     // Cada nome de gasto já usado vira uma categoria, preservando a classe.
     val existentes = p.categorias.toMutableList()
@@ -85,7 +131,7 @@ private fun migrarPerfil(p: Perfil): Perfil {
     val categorias = if (existentes.isEmpty()) categoriasPadrao() else existentes
 
     return p.copy(
-        contas = contas, categorias = categorias,
+        contas = contas.toList(), categorias = categorias,
         rendas = rendas, fixos = fixos, lancamentos = lancamentos
     )
 }

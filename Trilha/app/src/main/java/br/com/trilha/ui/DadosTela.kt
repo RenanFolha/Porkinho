@@ -5,6 +5,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,7 +19,7 @@ import java.time.YearMonth
 
 @Composable
 fun DadosTela(vm: TrilhaViewModel, p: Perfil, mes: YearMonth, padding: PaddingValues) {
-    val r = resumo(p)
+    val r = remember(p) { resumo(p) }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = padding) {
 
@@ -132,6 +133,7 @@ private fun BlocoCategorias(vm: TrilhaViewModel, p: Perfil, r: Resumo, mes: Year
     var emoji by remember { mutableStateOf("") }
     var classe by remember { mutableStateOf(Classe.IMPORTANTE) }
     var editando by remember { mutableStateOf<String?>(null) }
+    var apagando by remember { mutableStateOf<Categoria?>(null) }
 
     val gastos = remember(p, mes) { gastosPorCategoria(p, r, mes).associateBy { it.categoria.id } }
 
@@ -182,16 +184,20 @@ private fun BlocoCategorias(vm: TrilhaViewModel, p: Perfil, r: Resumo, mes: Year
                             CampoNumero("Teto mensal (R$, 0 = automático)", c.teto, "teto-${c.id}", Modifier.fillMaxWidth()) {
                                 vm.setCategoria(c.copy(teto = it))
                             }
-                            Spacer(Modifier.height(6.dp))
-                            TextButton(
-                                onClick = { vm.delCategoria(c.id); editando = null },
-                                colors = ButtonDefaults.textButtonColors(contentColor = Vermelho)
-                            ) {
-                                Text(
-                                    if (usada > 0) "Apagar (os $usada lançamentos ficam sem categoria)"
-                                    else "Apagar categoria",
-                                    fontSize = 12.5.sp
-                                )
+                            if (p.categorias.size > 1) {
+                                Spacer(Modifier.height(6.dp))
+                                TextButton(
+                                    onClick = {
+                                        if (usada > 0) apagando = c
+                                        else { vm.delCategoria(c.id, p.categorias.first { it.id != c.id }.id); editando = null }
+                                    },
+                                    colors = ButtonDefaults.textButtonColors(contentColor = Vermelho)
+                                ) {
+                                    Text(
+                                        if (usada > 0) "Apagar e mover os $usada lançamentos…" else "Apagar categoria",
+                                        fontSize = 12.5.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -230,6 +236,43 @@ private fun BlocoCategorias(vm: TrilhaViewModel, p: Perfil, r: Resumo, mes: Year
 
         if (!criando) BotaoAdicionar("+ nova categoria") { criando = true }
     }
+
+    apagando?.let { alvo ->
+        DialogoMoverCategoria(
+            alvo = alvo,
+            destinos = p.categorias.filter { it.id != alvo.id },
+            onEscolher = { destino -> vm.delCategoria(alvo.id, destino.id); apagando = null; editando = null },
+            onCancelar = { apagando = null }
+        )
+    }
+}
+
+/** Ao apagar uma categoria em uso, os lançamentos vão para a escolhida aqui. */
+@Composable
+private fun DialogoMoverCategoria(
+    alvo: Categoria,
+    destinos: List<Categoria>,
+    onEscolher: (Categoria) -> Unit,
+    onCancelar: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancelar,
+        title = { Text("Apagar ${alvo.nome}") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("Para qual categoria vão os lançamentos?", fontSize = 13.sp, color = Tinta2)
+                Spacer(Modifier.height(6.dp))
+                destinos.forEach { d ->
+                    TextButton(onClick = { onEscolher(d) }, modifier = Modifier.fillMaxWidth()) {
+                        Text("${d.emoji.ifBlank { "•" }}  ${d.nome}", modifier = Modifier.weight(1f), color = Tinta)
+                        Text(d.classe.rotulo, fontSize = 11.sp, color = Tinta2)
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onCancelar) { Text("Cancelar") } }
+    )
 }
 
 /* ---------- contas e cartões criados pelo usuário ---------- */
