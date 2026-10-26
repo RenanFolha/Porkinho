@@ -75,7 +75,6 @@ fun AppTrilha(vm: TrilhaViewModel) {
     val snackbar = remember { SnackbarHostState() }
     val escopo = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) { vm.semearSeVazio() }
     LaunchedEffect(aviso) {
         aviso?.let {
             escopo.launch { snackbar.showSnackbar(it) }

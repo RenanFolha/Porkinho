@@ -6,6 +6,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import br.com.trilha.data.*
 import com.google.firebase.auth.FirebaseUser
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +16,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -43,13 +46,35 @@ class TrilhaViewModel(app: Application) : AndroidViewModel(app) {
 
     val perfil: Perfil get() = _banco.value.ativo
 
+    /** Fila de gravação: só o estado mais recente importa, e um único consumidor garante a ordem. */
+    private val paraSalvar = Channel<Banco>(Channel.CONFLATED)
+
+    /** Até o arquivo ser lido, gravar qualquer coisa sobrescreveria os dados reais com um banco vazio. */
+    private var carregado = false
+
     init {
-        viewModelScope.launch { _banco.value = repo.carregar() }
+        viewModelScope.launch {
+            val carga = repo.carregar()
+            _banco.value = carga.banco
+            carregado = true
+            if (carga.corrompido) avisar("Os dados salvos estavam danificados. Uma cópia foi guardada e o app começou do zero.")
+            semearSeVazio()
+            for (b in paraSalvar) {
+                val ok = withContext(NonCancellable) { repo.salvar(b) }
+                if (!ok) avisar("Não foi possível salvar os dados")
+            }
+        }
     }
 
     private fun persistir(novo: Banco) {
+        if (!carregado) return
         _banco.value = novo
-        viewModelScope.launch { repo.salvar(novo) }
+        paraSalvar.trySend(novo)
+    }
+
+    /** Salva o que ainda estiver na fila — o consumidor morre junto com o viewModelScope. */
+    override fun onCleared() {
+        paraSalvar.tryReceive().getOrNull()?.let { repo.gravar(it) }
     }
 
     /** Aplica uma transformação no perfil ativo e salva. */

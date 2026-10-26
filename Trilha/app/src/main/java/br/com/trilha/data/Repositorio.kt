@@ -1,11 +1,14 @@
 package br.com.trilha.data
 
 import android.content.Context
+import android.util.AtomicFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.FileNotFoundException
+import java.io.IOException
 
 /**
  * Persistência local em arquivo JSON no diretório privado do app.
@@ -16,23 +19,47 @@ import java.io.File
  */
 class Repositorio(context: Context) {
 
-    private val arquivo = File(context.filesDir, "trilha.json")
+    private val pasta = context.filesDir
+    private val arquivo = AtomicFile(File(pasta, "trilha.json"))
     private val json = Json {
         prettyPrint = true
         ignoreUnknownKeys = true
         encodeDefaults = true
     }
 
-    suspend fun carregar(): Banco = withContext(Dispatchers.IO) {
-        val lido = runCatching {
-            if (arquivo.exists()) json.decodeFromString<Banco>(arquivo.readText()) else Banco()
-        }.getOrElse { Banco() }
-        migrar(lido)
+    /**
+     * Arquivo ilegível não é tratado como "sem dados": antes de seguir com um banco
+     * vazio, uma cópia é guardada ao lado, senão a próxima gravação a apagaria.
+     */
+    suspend fun carregar(): Carga = withContext(Dispatchers.IO) {
+        val lido = try {
+            json.decodeFromString<Banco>(arquivo.readFully().decodeToString())
+        } catch (e: FileNotFoundException) {
+            Banco()
+        } catch (e: Exception) {
+            runCatching {
+                arquivo.baseFile.copyTo(File(pasta, "trilha-corrompido-${System.currentTimeMillis()}.json"))
+            }
+            return@withContext Carga(migrar(Banco()), corrompido = true)
+        }
+        Carga(migrar(lido), corrompido = false)
     }
 
-    suspend fun salvar(banco: Banco) {
-        withContext(Dispatchers.IO) {
-            runCatching { arquivo.writeText(json.encodeToString(banco)) }
+    suspend fun salvar(banco: Banco): Boolean = withContext(Dispatchers.IO) { gravar(banco) }
+
+    /**
+     * Grava num arquivo novo e só então troca pelo antigo, então uma interrupção no meio
+     * nunca deixa o JSON pela metade. Bloqueante: chame fora da main, exceto no flush final.
+     */
+    fun gravar(banco: Banco): Boolean = synchronized(trava) {
+        val saida = try { arquivo.startWrite() } catch (e: IOException) { return false }
+        try {
+            saida.write(json.encodeToString(banco).encodeToByteArray())
+            arquivo.finishWrite(saida)
+            true
+        } catch (e: Exception) {
+            arquivo.failWrite(saida)
+            false
         }
     }
 
@@ -41,7 +68,14 @@ class Repositorio(context: Context) {
     suspend fun importarJson(texto: String): Banco? = withContext(Dispatchers.IO) {
         runCatching { migrar(json.decodeFromString<Banco>(texto)) }.getOrNull()
     }
+
+    private companion object {
+        /** Um só trilha.json por processo, mesmo que exista mais de um Repositorio. */
+        val trava = Any()
+    }
 }
+
+class Carga(val banco: Banco, val corrompido: Boolean)
 
 /**
  * Traz dados antigos para o formato com contas e categorias.
