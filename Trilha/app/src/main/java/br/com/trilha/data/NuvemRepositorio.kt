@@ -12,6 +12,7 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -113,8 +114,14 @@ class NuvemRepositorio {
         val localId = convite.getString("localId") ?: return@runCatching ResultadoConvite.Invalido
 
         val localRef = firestore.collection("locais").document(localId)
-        val membrosAtuais = localRef.get().await().get("membros") as? List<*> ?: emptyList<Any>()
-        if (uid in membrosAtuais) return@runCatching ResultadoConvite.JaEraMembro(localId)
+        // As regras só deixam membros lerem o Local: PERMISSION_DENIED aqui é o caso normal de quem ainda vai entrar.
+        val jaEraMembro = try {
+            uid in (localRef.get().await().get("membros") as? List<*>).orEmpty()
+        } catch (e: FirebaseFirestoreException) {
+            if (e.code != FirebaseFirestoreException.Code.PERMISSION_DENIED) throw e
+            false
+        }
+        if (jaEraMembro) return@runCatching ResultadoConvite.JaEraMembro(localId)
 
         @Suppress("UNCHECKED_CAST")
         val pessoaMapa = json.encodeToJsonElement(Pessoa.serializer(), Pessoa(id = uid, nome = nomeExibicao))
